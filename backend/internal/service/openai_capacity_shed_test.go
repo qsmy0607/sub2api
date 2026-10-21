@@ -22,6 +22,12 @@ type capacityShedAccountRepoStub struct {
 	AccountRepository // 嵌入接口，未实现的方法会 panic（不应被调用）
 
 	tempUnschedCalls int
+	modelRateLimits []string
+}
+
+func (r *capacityShedAccountRepoStub) SetModelRateLimit(_ context.Context, _ int64, model string, _ time.Time, _ ...string) error {
+	r.modelRateLimits = append(r.modelRateLimits, model)
+	return nil
 }
 
 func (r *capacityShedAccountRepoStub) SetTempUnschedulable(_ context.Context, _ int64, _ time.Time, _ string) error {
@@ -106,6 +112,29 @@ func TestOpenAIHTTPCapacityShedIsRequestScopedForOAuthAccounts(t *testing.T) {
 		"gpt-5",
 	))
 	require.Zero(t, repo.tempUnschedCalls)
+}
+
+func TestOpenAI503CapacityShedUsesRuntimeDefaultRetryLimit(t *testing.T) {
+	payload := []byte(`{"error":{"code":"server_is_overloaded","message":"Our servers are currently overloaded. Please try again later."}}`)
+	svc := &OpenAIGatewayService{}
+	err := svc.newOpenAIAccountFailoverError(nil, http.StatusServiceUnavailable, nil, payload, "Our servers are currently overloaded.", false, false)
+	svc.ApplyOpenAI503OverloadRetryPolicy(context.Background(), err)
+	require.True(t, err.SameAccountRetryMaxSet)
+	require.Zero(t, err.SameAccountRetryMax)
+}
+
+func TestMarkOpenAIOverloadCooldownIsModelScoped(t *testing.T) {
+	repo := &capacityShedAccountRepoStub{}
+	svc := &OpenAIGatewayService{
+		accountRepo: repo,
+	}
+	err := &UpstreamFailoverError{
+		StatusCode:             http.StatusServiceUnavailable,
+		ResponseBody:           []byte(`{"error":{"code":"server_is_overloaded"}}`),
+		RequestScopedTransient: true,
+	}
+	svc.MarkOpenAIOverloadCooldown(context.Background(), &Account{ID: 42}, "gpt-5.6-sol", err)
+	require.Equal(t, []string{"gpt-5.6-sol"}, repo.modelRateLimits)
 }
 
 // 上游降载的真实序列是「event: error → event: response.failed」。error 帧不算

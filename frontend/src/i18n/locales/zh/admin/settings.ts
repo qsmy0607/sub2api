@@ -1051,8 +1051,12 @@ export default {
         usage: '使用方法：在请求头中添加 x-api-key: <your-admin-api-key>'
       },
       overloadCooldown: {
-        title: '529 过载冷却',
-        description: '配置上游返回 529（过载）时的账号调度暂停策略',
+        openai503RetryCount: 'OpenAI 503 同账号重试次数',
+        openai503RetryCountHint: '切换账号前在当前账号的额外尝试次数（0-10）；0 表示立即切换',
+        openai503CooldownSeconds: 'OpenAI 503 模型冷却（秒）',
+        openai503CooldownSecondsHint: '重试耗尽后暂时排除该账号与模型（0-3600）；0 表示不冷却',
+        title: '过载与切号策略',
+        description: '配置 529 冷却以及 OpenAI/Codex 503 过载时的重试、切号和模型冷却策略',
         enabled: '启用过载冷却',
         enabledHint: '收到 529 错误时暂停该账号的调度，冷却后自动恢复',
         cooldownMinutes: '冷却时长（分钟）',

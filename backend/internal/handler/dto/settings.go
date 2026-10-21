@@ -460,8 +460,10 @@ type LoginAgreementDocument struct {
 
 // OverloadCooldownSettings 529过载冷却配置 DTO
 type OverloadCooldownSettings struct {
-	Enabled         bool `json:"enabled"`
-	CooldownMinutes int  `json:"cooldown_minutes"`
+	Enabled                        bool `json:"enabled"`
+	CooldownMinutes                int  `json:"cooldown_minutes"`
+	OpenAI503SameAccountRetryCount int `json:"openai_503_same_account_retry_count"`
+	OpenAI503CooldownSeconds       int `json:"openai_503_cooldown_seconds"`
 }
 
 // RateLimit429CooldownSettings 429默认回避配置 DTO

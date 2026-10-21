@@ -1057,12 +1057,16 @@ export default {
         usage: 'Usage: Add to request header - x-api-key: <your-admin-api-key>'
       },
       overloadCooldown: {
-        title: '529 Overload Cooldown',
-        description: 'Configure account scheduling pause strategy when upstream returns 529 (overloaded)',
+        title: 'Overload and Failover',
+        description: 'Configure 529 cooldown and OpenAI/Codex 503 retry, failover, and model cooldown behavior',
         enabled: 'Enable Overload Cooldown',
         enabledHint: 'Pause account scheduling on 529 errors, auto-recover after cooldown',
         cooldownMinutes: 'Cooldown Duration (minutes)',
         cooldownMinutesHint: 'Duration to pause account scheduling (1-120 minutes)',
+        openai503RetryCount: 'OpenAI 503 same-account retries',
+        openai503RetryCountHint: 'Extra attempts on the same account before switching (0-10); 0 switches immediately',
+        openai503CooldownSeconds: 'OpenAI 503 model cooldown (seconds)',
+        openai503CooldownSecondsHint: 'Exclude the account and model after retries are exhausted (0-3600); 0 disables cooldown',
         saved: 'Overload cooldown settings saved',
         saveFailed: 'Failed to save overload cooldown settings'
       },

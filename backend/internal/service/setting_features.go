@@ -681,6 +681,11 @@ func (s *SettingService) GetOverloadCooldownSettings(ctx context.Context) (*Over
 	if err := json.Unmarshal([]byte(value), &settings); err != nil {
 		return DefaultOverloadCooldownSettings(), nil
 	}
+	var fields map[string]json.RawMessage
+	_ = json.Unmarshal([]byte(value), &fields)
+	if _, ok := fields["openai_503_cooldown_seconds"]; !ok {
+		settings.OpenAI503CooldownSeconds = 15
+	}
 
 	// 修正配置值范围
 	if settings.CooldownMinutes < 1 {
@@ -688,6 +693,12 @@ func (s *SettingService) GetOverloadCooldownSettings(ctx context.Context) (*Over
 	}
 	if settings.CooldownMinutes > 120 {
 		settings.CooldownMinutes = 120
+	}
+	if settings.OpenAI503SameAccountRetryCount < 0 || settings.OpenAI503SameAccountRetryCount > 10 {
+		settings.OpenAI503SameAccountRetryCount = 0
+	}
+	if settings.OpenAI503CooldownSeconds < 0 || settings.OpenAI503CooldownSeconds > 3600 {
+		settings.OpenAI503CooldownSeconds = 15
 	}
 
 	return &settings, nil
@@ -705,6 +716,12 @@ func (s *SettingService) SetOverloadCooldownSettings(ctx context.Context, settin
 			return fmt.Errorf("cooldown_minutes must be between 1-120")
 		}
 		settings.CooldownMinutes = 10 // 禁用状态下归一化为默认值
+	}
+	if settings.OpenAI503SameAccountRetryCount < 0 || settings.OpenAI503SameAccountRetryCount > 10 {
+		return fmt.Errorf("openai_503_same_account_retry_count must be between 0-10")
+	}
+	if settings.OpenAI503CooldownSeconds < 0 || settings.OpenAI503CooldownSeconds > 3600 {
+		return fmt.Errorf("openai_503_cooldown_seconds must be between 0-3600")
 	}
 
 	data, err := json.Marshal(settings)

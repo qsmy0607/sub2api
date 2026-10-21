@@ -571,7 +571,9 @@ type OverloadCooldownSettings struct {
 	// Enabled 是否在收到529时暂停账号调度
 	Enabled bool `json:"enabled"`
 	// CooldownMinutes 冷却时长（分钟）
-	CooldownMinutes int `json:"cooldown_minutes"`
+	CooldownMinutes                int `json:"cooldown_minutes"`
+	OpenAI503SameAccountRetryCount int `json:"openai_503_same_account_retry_count"`
+	OpenAI503CooldownSeconds       int `json:"openai_503_cooldown_seconds"`
 }
 
 // RateLimit429CooldownSettings 429默认回避配置
@@ -612,8 +614,10 @@ func DefaultOpenAIAPIKeyHealthBreakerSettings() *OpenAIAPIKeyHealthBreakerSettin
 // DefaultOverloadCooldownSettings 返回默认的过载冷却配置（启用，10分钟）
 func DefaultOverloadCooldownSettings() *OverloadCooldownSettings {
 	return &OverloadCooldownSettings{
-		Enabled:         true,
-		CooldownMinutes: 10,
+		Enabled:                        true,
+		CooldownMinutes:                10,
+		OpenAI503SameAccountRetryCount: 0,
+		OpenAI503CooldownSeconds:       15,
 	}
 }
 

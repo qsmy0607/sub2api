@@ -107,6 +107,26 @@ func TestSameAccountRetryDeadlineAllows(t *testing.T) {
 	}))
 }
 
+func TestSameAccountRetryAllowed_ExplicitZeroDisablesRetry(t *testing.T) {
+	err := &service.UpstreamFailoverError{
+		RetryableOnSameAccount:  true,
+		SameAccountRetryMaxSet: true,
+		SameAccountRetryMax:    0,
+	}
+	require.False(t, sameAccountRetryAllowed(err, 0, 3))
+	require.Equal(t, 0, effectiveSameAccountRetryLimit(err, &service.Account{}))
+}
+
+func TestSameAccountRetryAllowed_ExplicitLimit(t *testing.T) {
+	err := &service.UpstreamFailoverError{
+		RetryableOnSameAccount:  true,
+		SameAccountRetryMaxSet: true,
+		SameAccountRetryMax:    1,
+	}
+	require.True(t, sameAccountRetryAllowed(err, 0, 3))
+	require.False(t, sameAccountRetryAllowed(err, 1, 3))
+}
+
 func TestEffectiveSameAccountRetryLimitHonorsErrorCapAndDisabledAccount(t *testing.T) {
 	account := &service.Account{Type: service.AccountTypeAPIKey, Credentials: map[string]any{"pool_mode": true, "pool_mode_retry_count": float64(3)}}
 	require.Equal(t, 1, effectiveSameAccountRetryLimit(&service.UpstreamFailoverError{SameAccountRetryMax: 1}, account))

@@ -60,15 +60,19 @@ func (h *SettingHandler) GetOverloadCooldownSettings(c *gin.Context) {
 	}
 
 	response.Success(c, dto.OverloadCooldownSettings{
-		Enabled:         settings.Enabled,
-		CooldownMinutes: settings.CooldownMinutes,
+		Enabled:                        settings.Enabled,
+		CooldownMinutes:                settings.CooldownMinutes,
+		OpenAI503SameAccountRetryCount: settings.OpenAI503SameAccountRetryCount,
+		OpenAI503CooldownSeconds:       settings.OpenAI503CooldownSeconds,
 	})
 }
 
 // UpdateOverloadCooldownSettingsRequest 更新529过载冷却配置请求
 type UpdateOverloadCooldownSettingsRequest struct {
-	Enabled         bool `json:"enabled"`
-	CooldownMinutes int  `json:"cooldown_minutes"`
+	Enabled                        bool `json:"enabled"`
+	CooldownMinutes                int  `json:"cooldown_minutes"`
+	OpenAI503SameAccountRetryCount int `json:"openai_503_same_account_retry_count"`
+	OpenAI503CooldownSeconds       int `json:"openai_503_cooldown_seconds"`
 }
 
 // UpdateOverloadCooldownSettings 更新529过载冷却配置
@@ -81,8 +85,10 @@ func (h *SettingHandler) UpdateOverloadCooldownSettings(c *gin.Context) {
 	}
 
 	settings := &service.OverloadCooldownSettings{
-		Enabled:         req.Enabled,
-		CooldownMinutes: req.CooldownMinutes,
+		Enabled:                        req.Enabled,
+		CooldownMinutes:                req.CooldownMinutes,
+		OpenAI503SameAccountRetryCount: req.OpenAI503SameAccountRetryCount,
+		OpenAI503CooldownSeconds:       req.OpenAI503CooldownSeconds,
 	}
 
 	if err := h.settingService.SetOverloadCooldownSettings(c.Request.Context(), settings); err != nil {
@@ -97,8 +103,10 @@ func (h *SettingHandler) UpdateOverloadCooldownSettings(c *gin.Context) {
 	}
 
 	response.Success(c, dto.OverloadCooldownSettings{
-		Enabled:         updatedSettings.Enabled,
-		CooldownMinutes: updatedSettings.CooldownMinutes,
+		Enabled:                        updatedSettings.Enabled,
+		CooldownMinutes:                updatedSettings.CooldownMinutes,
+		OpenAI503SameAccountRetryCount: updatedSettings.OpenAI503SameAccountRetryCount,
+		OpenAI503CooldownSeconds:       updatedSettings.OpenAI503CooldownSeconds,
 	})
 }
 

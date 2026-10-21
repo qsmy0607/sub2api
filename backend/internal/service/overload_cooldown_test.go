@@ -5,6 +5,7 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"testing"
 	"time"
 
@@ -65,6 +66,8 @@ func TestGetOverloadCooldownSettings_DefaultsWhenNotSet(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, settings.Enabled)
 	require.Equal(t, 10, settings.CooldownMinutes)
+	require.Zero(t, settings.OpenAI503SameAccountRetryCount)
+	require.Equal(t, 15, settings.OpenAI503CooldownSeconds)
 }
 
 func TestGetOverloadCooldownSettings_ReadsFromDB(t *testing.T) {
@@ -132,8 +135,10 @@ func TestSetOverloadCooldownSettings_Success(t *testing.T) {
 	svc := NewSettingService(repo, &config.Config{})
 
 	err := svc.SetOverloadCooldownSettings(context.Background(), &OverloadCooldownSettings{
-		Enabled:         false,
-		CooldownMinutes: 25,
+		Enabled:                        false,
+		CooldownMinutes:                25,
+		OpenAI503SameAccountRetryCount: 2,
+		OpenAI503CooldownSeconds:       45,
 	})
 	require.NoError(t, err)
 
@@ -142,6 +147,34 @@ func TestSetOverloadCooldownSettings_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, settings.Enabled)
 	require.Equal(t, 25, settings.CooldownMinutes)
+	require.Equal(t, 2, settings.OpenAI503SameAccountRetryCount)
+	require.Equal(t, 45, settings.OpenAI503CooldownSeconds)
+}
+
+func TestOpenAI503OverloadPolicyUsesRuntimeSettings(t *testing.T) {
+	settingRepo := newMockSettingRepo()
+	settings := OverloadCooldownSettings{
+		Enabled:                        true,
+		CooldownMinutes:                10,
+		OpenAI503SameAccountRetryCount: 2,
+		OpenAI503CooldownSeconds:       45,
+	}
+	raw, err := json.Marshal(settings)
+	require.NoError(t, err)
+	settingRepo.data[SettingKeyOverloadCooldownSettings] = string(raw)
+
+	svc := &OpenAIGatewayService{settingService: NewSettingService(settingRepo, &config.Config{})}
+	failoverErr := &UpstreamFailoverError{
+		StatusCode:             http.StatusServiceUnavailable,
+		ResponseBody:           []byte(`{"error":{"code":"server_is_overloaded"}}`),
+		RequestScopedTransient: true,
+	}
+	svc.ApplyOpenAI503OverloadRetryPolicy(context.Background(), failoverErr)
+	require.True(t, failoverErr.SameAccountRetryMaxSet)
+	require.Equal(t, 2, failoverErr.SameAccountRetryMax)
+	retryCount, cooldownSeconds := svc.openAI503OverloadSettings(context.Background())
+	require.Equal(t, 2, retryCount)
+	require.Equal(t, 45, cooldownSeconds)
 }
 
 func TestSetOverloadCooldownSettings_RejectsNil(t *testing.T) {
@@ -341,6 +374,8 @@ func TestDefaultOverloadCooldownSettings(t *testing.T) {
 	d := DefaultOverloadCooldownSettings()
 	require.True(t, d.Enabled)
 	require.Equal(t, 10, d.CooldownMinutes)
+	require.Zero(t, d.OpenAI503SameAccountRetryCount)
+	require.Equal(t, 15, d.OpenAI503CooldownSeconds)
 }
 
 func TestOverloadCooldownSettings_JSONRoundTrip(t *testing.T) {
@@ -357,6 +392,10 @@ func TestOverloadCooldownSettings_JSONRoundTrip(t *testing.T) {
 	require.NoError(t, json.Unmarshal(data, &raw))
 	_, hasEnabled := raw["enabled"]
 	_, hasCooldown := raw["cooldown_minutes"]
+	_, hasOpenAI503Retries := raw["openai_503_same_account_retry_count"]
+	_, hasOpenAI503Cooldown := raw["openai_503_cooldown_seconds"]
 	require.True(t, hasEnabled, "JSON must use 'enabled'")
 	require.True(t, hasCooldown, "JSON must use 'cooldown_minutes'")
+	require.True(t, hasOpenAI503Retries)
+	require.True(t, hasOpenAI503Cooldown)
 }

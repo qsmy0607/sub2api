@@ -265,13 +265,65 @@
                 </div>
 
                 <div
-                  class="flex justify-end border-t border-gray-100 pt-4 dark:border-dark-700"
+                  class="flex flex-col gap-4 border-t border-gray-100 pt-4 dark:border-dark-700 sm:flex-row sm:items-end sm:justify-between"
                 >
+                  <div class="grid w-full gap-4 sm:w-auto sm:grid-cols-2">
+                    <div>
+                      <label
+                        class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                      >
+                        {{
+                          t(
+                            "admin.settings.overloadCooldown.openai503RetryCount",
+                          )
+                        }}
+                      </label>
+                      <input
+                        v-model.number="overloadCooldownForm.openai_503_same_account_retry_count"
+                        type="number"
+                        min="0"
+                        max="10"
+                        class="input w-32"
+                      />
+                      <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        {{
+                          t(
+                            "admin.settings.overloadCooldown.openai503RetryCountHint",
+                          )
+                        }}
+                      </p>
+                    </div>
+                    <div>
+                      <label
+                        class="mb-2 block text-sm font-medium text-gray-700 dark:text-gray-300"
+                      >
+                        {{
+                          t(
+                            "admin.settings.overloadCooldown.openai503CooldownSeconds",
+                          )
+                        }}
+                      </label>
+                      <input
+                        v-model.number="overloadCooldownForm.openai_503_cooldown_seconds"
+                        type="number"
+                        min="0"
+                        max="3600"
+                        class="input w-32"
+                      />
+                      <p class="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                        {{
+                          t(
+                            "admin.settings.overloadCooldown.openai503CooldownSecondsHint",
+                          )
+                        }}
+                      </p>
+                    </div>
+                  </div>
                   <button
                     type="button"
                     @click="saveOverloadCooldownSettings"
                     :disabled="overloadCooldownSaving"
-                    class="btn btn-primary btn-sm"
+                    class="btn btn-primary btn-sm self-end"
                   >
                     <svg
                       v-if="overloadCooldownSaving"
@@ -9215,6 +9267,8 @@ const overloadCooldownSaving = ref(false);
 const overloadCooldownForm = reactive({
   enabled: true,
   cooldown_minutes: 10,
+  openai_503_same_account_retry_count: 0,
+  openai_503_cooldown_seconds: 15,
 });
 
 // Rate Limit Cooldown (429) 状态
@@ -12191,6 +12245,10 @@ async function saveOverloadCooldownSettings() {
     const updated = await adminAPI.settings.updateOverloadCooldownSettings({
       enabled: overloadCooldownForm.enabled,
       cooldown_minutes: overloadCooldownForm.cooldown_minutes,
+      openai_503_same_account_retry_count:
+        overloadCooldownForm.openai_503_same_account_retry_count,
+      openai_503_cooldown_seconds:
+        overloadCooldownForm.openai_503_cooldown_seconds,
     });
     Object.assign(overloadCooldownForm, updated);
     appStore.showSuccess(t("admin.settings.overloadCooldown.saved"));
