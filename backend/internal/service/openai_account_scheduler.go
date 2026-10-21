@@ -66,6 +66,24 @@ type openAIAdvancedSchedulerRuntimeSettings struct {
 
 var openAIAdvancedSchedulerSettingCache atomic.Value // *cachedOpenAIAdvancedSchedulerSetting
 var openAIAdvancedSchedulerSettingSF singleflight.Group
+var openAIAdvancedSchedulerSettingRefresh atomic.Bool
+
+type openAIAdvancedSchedulerForceRefreshContextKey struct{}
+
+func openAIAdvancedSchedulerSettingsFromCache(cached *cachedOpenAIAdvancedSchedulerSetting) openAIAdvancedSchedulerRuntimeSettings {
+	if cached == nil {
+		return openAIAdvancedSchedulerRuntimeSettings{}
+	}
+	return openAIAdvancedSchedulerRuntimeSettings{
+		lowUpstreamRatePriorityEnabled: cached.lowUpstreamRatePriorityEnabled,
+		oauthSchedulingRateMultiplier:  cached.oauthSchedulingRateMultiplier,
+		enabled:                        cached.enabled,
+		stickyWeightedEnabled:          cached.stickyWeightedEnabled,
+		subscriptionPriorityEnabled:    cached.subscriptionPriorityEnabled,
+		lbTopKOverride:                 cached.lbTopKOverride,
+		weightOverrides:                cloneOpenAIAdvancedSchedulerWeightOverrides(cached.weightOverrides),
+	}
+}
 
 type OpenAIAccountScheduleRequest struct {
 	GroupID                 *int64
@@ -1884,32 +1902,29 @@ func (s *OpenAIGatewayService) openAIAdvancedSchedulerSettingRepo() SettingRepos
 }
 
 func (s *OpenAIGatewayService) openAIAdvancedSchedulerRuntimeSettings(ctx context.Context) openAIAdvancedSchedulerRuntimeSettings {
+	forceRefresh, _ := ctx.Value(openAIAdvancedSchedulerForceRefreshContextKey{}).(bool)
 	if cached, ok := openAIAdvancedSchedulerSettingCache.Load().(*cachedOpenAIAdvancedSchedulerSetting); ok && cached != nil {
 		if time.Now().UnixNano() < cached.expiresAt {
-			return openAIAdvancedSchedulerRuntimeSettings{
-				lowUpstreamRatePriorityEnabled: cached.lowUpstreamRatePriorityEnabled,
-				oauthSchedulingRateMultiplier:  cached.oauthSchedulingRateMultiplier,
-				enabled:                        cached.enabled,
-				stickyWeightedEnabled:          cached.stickyWeightedEnabled,
-				subscriptionPriorityEnabled:    cached.subscriptionPriorityEnabled,
-				lbTopKOverride:                 cached.lbTopKOverride,
-				weightOverrides:                cloneOpenAIAdvancedSchedulerWeightOverrides(cached.weightOverrides),
+			return openAIAdvancedSchedulerSettingsFromCache(cached)
+		}
+		if !forceRefresh {
+			// Settings freshness must not add a database round trip to OpenAI account
+			// selection. Serve the last known policy and refresh it once in background.
+			if openAIAdvancedSchedulerSettingRefresh.CompareAndSwap(false, true) {
+				refreshCtx := context.WithValue(context.WithoutCancel(ctx), openAIAdvancedSchedulerForceRefreshContextKey{}, true)
+				go func() {
+					defer openAIAdvancedSchedulerSettingRefresh.Store(false)
+					s.openAIAdvancedSchedulerRuntimeSettings(refreshCtx)
+				}()
 			}
+			return openAIAdvancedSchedulerSettingsFromCache(cached)
 		}
 	}
 
 	result, _, _ := openAIAdvancedSchedulerSettingSF.Do(openAIAdvancedSchedulerSettingKey, func() (any, error) {
 		if cached, ok := openAIAdvancedSchedulerSettingCache.Load().(*cachedOpenAIAdvancedSchedulerSetting); ok && cached != nil {
 			if time.Now().UnixNano() < cached.expiresAt {
-				return openAIAdvancedSchedulerRuntimeSettings{
-					lowUpstreamRatePriorityEnabled: cached.lowUpstreamRatePriorityEnabled,
-					oauthSchedulingRateMultiplier:  cached.oauthSchedulingRateMultiplier,
-					enabled:                        cached.enabled,
-					stickyWeightedEnabled:          cached.stickyWeightedEnabled,
-					subscriptionPriorityEnabled:    cached.subscriptionPriorityEnabled,
-					lbTopKOverride:                 cached.lbTopKOverride,
-					weightOverrides:                cloneOpenAIAdvancedSchedulerWeightOverrides(cached.weightOverrides),
-				}, nil
+				return openAIAdvancedSchedulerSettingsFromCache(cached), nil
 			}
 		}
 
@@ -2095,6 +2110,7 @@ func (s *OpenAIGatewayService) getOpenAIAccountScheduler(ctx context.Context) Op
 func resetOpenAIAdvancedSchedulerSettingCacheForTest() {
 	openAIAdvancedSchedulerSettingCache = atomic.Value{}
 	openAIAdvancedSchedulerSettingSF = singleflight.Group{}
+	openAIAdvancedSchedulerSettingRefresh.Store(false)
 }
 
 func (s *OpenAIGatewayService) SelectAccountWithScheduler(

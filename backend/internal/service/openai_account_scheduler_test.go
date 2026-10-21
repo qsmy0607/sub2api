@@ -233,7 +233,9 @@ func newSchedulerTestSubscriptionPriorityConfig() *config.Config {
 }
 
 type openAIAdvancedSchedulerSettingRepoStub struct {
-	values map[string]string
+	values             map[string]string
+	getMultipleStarted chan struct{}
+	getMultipleBlock   <-chan struct{}
 }
 
 func (s *openAIAdvancedSchedulerSettingRepoStub) Get(ctx context.Context, key string) (*Setting, error) {
@@ -260,6 +262,15 @@ func (s *openAIAdvancedSchedulerSettingRepoStub) Set(context.Context, string, st
 }
 
 func (s *openAIAdvancedSchedulerSettingRepoStub) GetMultiple(_ context.Context, keys []string) (map[string]string, error) {
+	if s.getMultipleStarted != nil {
+		select {
+		case s.getMultipleStarted <- struct{}{}:
+		default:
+		}
+	}
+	if s.getMultipleBlock != nil {
+		<-s.getMultipleBlock
+	}
 	result := make(map[string]string, len(keys))
 	for _, key := range keys {
 		if value, err := s.GetValue(context.Background(), key); err == nil {
@@ -267,6 +278,41 @@ func (s *openAIAdvancedSchedulerSettingRepoStub) GetMultiple(_ context.Context, 
 		}
 	}
 	return result, nil
+}
+
+func TestOpenAIAdvancedSchedulerExpiredCacheDoesNotBlockRequest(t *testing.T) {
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
+	block := make(chan struct{})
+	started := make(chan struct{}, 1)
+	repo := &openAIAdvancedSchedulerSettingRepoStub{
+		values:             map[string]string{openAIAdvancedSchedulerSettingKey: "false"},
+		getMultipleStarted: started,
+		getMultipleBlock:   block,
+	}
+	svc := &OpenAIGatewayService{
+		rateLimitService: &RateLimitService{settingService: NewSettingService(repo, &config.Config{})},
+	}
+	openAIAdvancedSchedulerSettingCache.Store(&cachedOpenAIAdvancedSchedulerSetting{
+		enabled:   true,
+		expiresAt: time.Now().Add(-time.Second).UnixNano(),
+	})
+
+	begin := time.Now()
+	settings := svc.openAIAdvancedSchedulerRuntimeSettings(context.Background())
+	require.True(t, settings.enabled)
+	require.Less(t, time.Since(begin), 250*time.Millisecond)
+
+	select {
+	case <-started:
+	case <-time.After(time.Second):
+		close(block)
+		t.Fatal("background scheduler setting refresh did not start")
+	}
+	close(block)
+	require.Eventually(t, func() bool {
+		return !openAIAdvancedSchedulerSettingRefresh.Load()
+	}, time.Second, 10*time.Millisecond)
+	resetOpenAIAdvancedSchedulerSettingCacheForTest()
 }
 
 func (s *openAIAdvancedSchedulerSettingRepoStub) SetMultiple(context.Context, map[string]string) error {
